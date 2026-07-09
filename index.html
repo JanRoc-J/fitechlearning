@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinTech Learning Lab</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:60px 20px}
+h1{font-size:28px;font-weight:500;margin-bottom:8px}
+.sub{font-size:14px;color:#888;margin-bottom:40px}
+.tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:900px;width:100%}
+.card{background:#fff;border-radius:12px;padding:24px;border:0.5px solid #e0e0e0;text-decoration:none;color:inherit;transition:border-color 0.2s}
+.card:hover{border-color:#185FA5}
+.card h2{font-size:16px;font-weight:500;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.card p{font-size:13px;color:#666;line-height:1.6}
+.card .tag{display:inline-block;background:#e6f1fb;color:#185FA5;font-size:11px;padding:2px 8px;border-radius:4px;margin-top:12px}
+</style>
+</head>
+<body>
+
+<h1>FinTech Learning Lab</h1>
+<p class="sub">金融科技学习实践 · 股票数据分析与可视化</p>
+
+<div class="tools">
+  <a href="task02_indicator/indicator_lab.html" class="card">
+    <h2>Indicator Lab</h2>
+    <p>交互式技术指标分析工具。选择股票、调整RSI/MACD/布林带/ATR参数，实时重绘图表。</p>
+    <span class="tag">v0.1 · 4只A股 · ECharts</span>
+  </a>
+  <a href="dashboard.html" class="card">
+    <h2>Stock Dashboard</h2>
+    <p>三只核心标的行情看板。中芯国际、长江电力、比亚迪的日线数据可视化。</p>
+    <span class="tag">Tushare Pro · 价格走势</span>
+  </a>
+</div>
+
+</body>
+</html>
