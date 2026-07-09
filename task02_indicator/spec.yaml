@@ -1,0 +1,273 @@
+# =============================================================================
+# 技术指标计算规范 (Technical Indicator Calculation Specification)
+# =============================================================================
+# 版本: v1.0
+# 创建日期: 2026-07-09
+# 描述: 中国船舶 (600150.SH) A股日线数据的技术指标计算规范
+#       包含 RSI / MACD / Bollinger Bands / ATR 四个指标的参数、公式和输出
+# 数据来源: Tushare Pro API (via MCP)
+# =============================================================================
+
+metadata:
+  version: "1.0"
+  created: "2026-07-09"
+  author: "WorkBuddy"
+  description: "中国船舶 (600150.SH) 技术指标计算规范"
+  parent_spec: "../stock_data_spec.yaml"
+  tags: ["technical-indicator", "rsi", "macd", "bollinger", "atr", "a-share"]
+
+# =============================================================================
+# 数据源
+# =============================================================================
+datasource:
+  primary: "tushareMcp"
+  api_function: "daily"
+  parameters:
+    ts_code: "600150.SH"
+    start_date: "20250709"
+    end_date: "20260709"
+
+# =============================================================================
+# 股票标的
+# =============================================================================
+security:
+  name: "中国船舶"
+  name_en: "China State Shipbuilding Corporation"
+  ts_code: "600150.SH"
+  exchange: "SSE Main Board (上证主板)"
+  industry: "国防军工 / 船舶制造"
+
+# =============================================================================
+# 数据范围
+# =============================================================================
+data_range:
+  lookback_days: 252                              # 近1年交易日
+  start_date: "2025-07-09"
+  end_date: "2026-07-08"
+  records_count: ~232                              # 实际交易日数
+  price_range:
+    min_close: 32.38
+    max_close: 42.04
+
+# =============================================================================
+# 指标 1 — RSI (相对强弱指标)
+# =============================================================================
+indicator_rsi:
+  name: "RSI"
+  full_name: "Relative Strength Index"
+  author: "J. Welles Wilder (1978)"
+  parameter:
+    period: 14                                    # 标准参数
+  input_fields:
+    - "close"
+    - "pre_close"
+  output_fields:
+    - "rsi_14"                                    # RSI 值
+    - "up_ema_14"                                 # 涨幅指数平滑（内部）
+    - "down_ema_14"                               # 跌幅指数平滑（内部）
+
+  calculation:
+    step_1:
+      description: "分别计算涨跌值"
+      formula: |
+        U = max(close - pre_close, 0)
+        D = max(pre_close - close, 0)
+    step_2:
+      description: "计算14日初始简单平均"
+      formula: |
+        AvgU_0 = mean(U[0:14])
+        AvgD_0 = mean(D[0:14])
+    step_3:
+      description: "Wilder 指数平滑递推"
+      formula: |
+        AvgU_t = (AvgU_{t-1} * 13 + U_t) / 14
+        AvgD_t = (AvgD_{t-1} * 13 + D_t) / 14
+    step_4:
+      description: "RSI 值"
+      formula: "RSI = 100 - 100 / (1 + AvgU / AvgD)"
+
+  signal:
+    overbought: 70                                # 超买阈值
+    oversold: 30                                  # 超卖阈值
+    neutral: 50                                   # 中性线
+
+  python_implementation: |
+    def calc_rsi(df, period=14):
+        delta = df['close'].diff()
+        gain = delta.clip(lower=0)
+        loss = (-delta).clip(lower=0)
+        avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+        rs = avg_gain / avg_loss
+        return 100 - 100 / (1 + rs)
+
+# =============================================================================
+# 指标 2 — MACD (异同移动平均线)
+# =============================================================================
+indicator_macd:
+  name: "MACD"
+  full_name: "Moving Average Convergence Divergence"
+  author: "Gerald Appel (1979)"
+  parameter:
+    fast: 12                                      # 快线 EMA 周期
+    slow: 26                                      # 慢线 EMA 周期
+    signal: 9                                     # 信号线 DEA EMA 周期
+  input_fields:
+    - "close"
+  output_fields:
+    - "ema_12"                                    # 快 EMA
+    - "ema_26"                                    # 慢 EMA
+    - "dif"                                       # DIF = EMA12 - EMA26
+    - "dea"                                       # DEA = EMA9(DIF)
+    - "bar"                                       # BAR = 2*(DIF-DEA)
+
+  calculation:
+    step_1:
+      description: "计算快慢 EMA"
+      formula: |
+        EMA12 = alpha=2/(12+1) * close + (1-alpha) * prev_EMA12
+        EMA26 = alpha=2/(26+1) * close + (1-alpha) * prev_EMA26
+    step_2:
+      description: "DIF 快慢线差值"
+      formula: "DIF = EMA12 - EMA26"
+    step_3:
+      description: "DEA 信号线 (DIF 的 9日 EMA)"
+      formula: "DEA = EMA9(DIF)"
+    step_4:
+      description: "BAR 柱状图 (放大2倍便于观察)"
+      formula: "BAR = 2 * (DIF - DEA)"
+
+  signal:
+    golden_cross: "DIF 上穿 DEA → 金叉 (买入)"
+    death_cross: "DIF 下穿 DEA → 死叉 (卖出)"
+    zero_cross: "DIF/DEA 穿越零轴 → 牛熊转换"
+
+  python_implementation: |
+    def calc_macd(df, fast=12, slow=26, signal=9):
+        ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
+        ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
+        dif = ema_fast - ema_slow
+        dea = dif.ewm(span=signal, adjust=False).mean()
+        bar = 2 * (dif - dea)
+        return dif, dea, bar
+
+# =============================================================================
+# 指标 3 — BOLL (布林带)
+# =============================================================================
+indicator_boll:
+  name: "BOLL"
+  full_name: "Bollinger Bands"
+  author: "John Bollinger (1980s)"
+  parameter:
+    period: 20                                    # 中轨 SMA 周期
+    multiplier: 2                                 # 标准差倍数
+  input_fields:
+    - "close"
+  output_fields:
+    - "boll_mid"                                  # 中轨 (SMA20)
+    - "boll_upper"                                # 上轨 (MID + 2σ)
+    - "boll_lower"                                # 下轨 (MID - 2σ)
+    - "boll_width"                                # 带宽 (UPPER - LOWER)
+    - "boll_pct_b"                                # %B = (close - LOWER)/(UPPER - LOWER)
+
+  calculation:
+    step_1:
+      description: "中轨 (简单移动平均)"
+      formula: "MIDDLE = SMA(close, 20)"
+    step_2:
+      description: "滚动标准差"
+      formula: "σ = std(close_{t-19}..close_t)"
+    step_3:
+      description: "上下轨"
+      formula: |
+        UPPER = MIDDLE + 2 * σ
+        LOWER = MIDDLE - 2 * σ
+
+  signal:
+    squeeze: "带宽缩到阶段极低 → 变盘预警"
+    walking: "价格持续贴边运行 → 趋势强劲"
+    tag_upper: "触及上轨 → 关注阻力"
+    tag_lower: "触及下轨 → 关注支撑"
+
+  python_implementation: |
+    def calc_bollinger(df, period=20, k=2):
+        mid = df['close'].rolling(window=period).mean()
+        std = df['close'].rolling(window=period).std()
+        upper = mid + k * std
+        lower = mid - k * std
+        return mid, upper, lower
+
+# =============================================================================
+# 指标 4 — ATR (平均真实波幅)
+# =============================================================================
+indicator_atr:
+  name: "ATR"
+  full_name: "Average True Range"
+  author: "J. Welles Wilder (1978)"
+  parameter:
+    period: 14                                    # 标准参数
+  input_fields:
+    - "high"
+    - "low"
+    - "close"
+    - "pre_close"                                 # 需要前一日收盘
+  output_fields:
+    - "tr"                                        # 真实波幅 (中间值)
+    - "atr_14"                                    # ATR 值
+
+  calculation:
+    step_1:
+      description: "计算每日真实波幅 TR (三取最大)"
+      formula: |
+        A = high - low
+        B = |high - prev_close|
+        C = |low - prev_close|
+        TR = max(A, B, C)
+    step_2:
+      description: "Wilder 指数平滑 (同 RSI)"
+      formula: |
+        ATR_0 = mean(TR[0:14])
+        ATR_t = (ATR_{t-1} * 13 + TR_t) / 14
+
+  applications:
+    stop_loss: "止损距离 = N * ATR (N 通常取 2-3)"
+    position_sizing: "仓位 = 单笔风险金额 / ATR"
+    volatility_filter: "ATR 上升 → 加宽止损,下降 → 收紧止损"
+
+  python_implementation: |
+    def calc_atr(df, period=14):
+        high, low, close = df['high'], df['low'], df['close']
+        prev_close = close.shift(1)
+        tr1 = high - low
+        tr2 = (high - prev_close).abs()
+        tr3 = (low - prev_close).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = tr.ewm(alpha=1/period, adjust=False).mean()
+        return tr, atr
+
+# =============================================================================
+# 输出规范
+# =============================================================================
+output:
+  notebook: "indicator.ipynb"                     # 主交付物
+  data_csv: "data/中国船舶_A.csv"                  # 原始行情
+  charts:
+    rsi: "rsi_chart.png"                          # RSI 子图 (含超买超卖线)
+    macd: "macd_chart.png"                        # MACD 三线图
+    boll: "boll_chart.png"                        # 布林带价格通道
+    atr: "atr_chart.png"                          # ATR 波动曲线
+    dashboard: "dashboard.png"                    # 综合看板
+
+  visualization:
+    figure_size: [16, 10]
+    chinese_font: "SimHei"                        # 中文字体
+    dpi: 120
+
+# =============================================================================
+# 质量检查
+# =============================================================================
+quality_check:
+  rsi_range: [0, 100]                             # RSI 必须在 [0,100]
+  atr_positive: true                               # ATR 必须 > 0
+  boll_lower_lt_upper: true                        # LOWER <= MID <= UPPER
+  macd_bar_sign_check: true                        # BAR 符号 = DIF-DEA 符号
