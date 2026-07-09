@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中芯国际 (688981.SH) - K线面板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff;
+            padding: 20px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        }
+        .header-left h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .header-left .code {
+            font-size: 13px;
+            opacity: 0.7;
+            margin-left: 10px;
+        }
+        .header-right {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        .header-right .price-now {
+            font-size: 32px;
+            font-weight: 800;
+        }
+        .header-right .change-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        .change-info .change-val {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .change-info .change-pct {
+            font-size: 13px;
+            opacity: 0.85;
+        }
+        .up { color: #ff4d4f; }
+        .down { color: #52c41a; }
+
+        /* Stats Row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            padding: 20px 32px;
+        }
+        .stat-card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 18px 20px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .stat-card .label {
+            font-size: 12px;
+            color: #8c8c8c;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-card .value {
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .stat-card .sub {
+            font-size: 12px;
+            color: #8c8c8c;
+        }
+
+        /* Charts */
+        .charts-container {
+            display: grid;
+            grid-template-rows: auto auto;
+            gap: 16px;
+            padding: 0 32px 32px;
+        }
+        .chart-panel {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .chart-panel .chart-title {
+            font-size: 15px;
+            font-weight: 600;
+            padding: 16px 20px 0;
+            color: #333;
+        }
+        .chart-panel .chart-inner {
+            width: 100%;
+            height: 450px;
+        }
+        .chart-panel.volume-panel .chart-inner {
+            height: 220px;
+        }
+
+        /* Range selector */
+        .range-selector {
+            display: flex;
+            gap: 6px;
+            padding: 8px 20px 0;
+        }
+        .range-selector button {
+            padding: 4px 14px;
+            border: 1px solid #d9d9d9;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .range-selector button:hover {
+            border-color: #1677ff;
+            color: #1677ff;
+        }
+        .range-selector button.active {
+            background: #1677ff;
+            color: #fff;
+            border-color: #1677ff;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 16px;
+            color: #8c8c8c;
+            font-size: 12px;
+        }
+        .footer a { color: #1677ff; text-decoration: none; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .stats-row { grid-template-columns: repeat(2, 1fr); padding: 16px; }
+            .charts-container { padding: 0 16px 16px; }
+            .header { flex-direction: column; gap: 10px; padding: 16px; }
+            .chart-panel .chart-inner { height: 300px; }
+            .header-right .price-now { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <h1>中芯国际<span class="code">688981.SH · 科创板</span></h1>
+    </div>
+    <div class="header-right" id="headerInfo"></div>
+</div>
+
+<div class="stats-row" id="statsRow"></div>
+
+<div class="charts-container">
+    <div class="chart-panel">
+        <div class="chart-title">K线图</div>
+        <div class="range-selector" id="kRangeSelector"></div>
+        <div class="chart-inner" id="kChart"></div>
+    </div>
+    <div class="chart-panel volume-panel">
+        <div class="chart-title">成交量</div>
+        <div class="range-selector" id="vRangeSelector"></div>
+        <div class="chart-inner" id="vChart"></div>
+    </div>
+</div>
+
+<div class="footer">
+    数据来源：<a href="https://tushare.pro" target="_blank">Tushare Pro</a> · 数据更新至 2026-07-08
+</div>
+
+<script>
+// ── Load data ──
+const rawData = [
+{"date":"2025-07-09","open":86.65,"high":86.86,"low":85.52,"close":85.85,"vol":183102.0,"amount":1578143.686},
+{"date":"2025-07-10","open":85.61,"high":86.17,"low":85.5,"close":85.67,"vol":175639.46,"amount":1506706.468},
+{"date":"2025-07-11","open":85.7,"high":89.34,"low":85.4,"close":88.16,"vol":469922.38,"amount":4128335.55},
+{"date":"2025-07-14","open":88.3,"high":88.49,"low":87.47,"close":87.52,"vol":189831.36,"amount":1667925.619},
+{"date":"2025-07-15","open":87.15,"high":87.95,"low":86.61,"close":87.89,"vol":206173.16,"amount":1800356.659},
+{"date":"2025-07-16","open":87.73,"high":88.2,"low":86.77,"close":87.12,"vol":196708.51,"amount":1720548.788},
+{"date":"2025-07-17","open":87.06,"high":89.0,"low":86.32,"close":88.79,"vol":287922.16,"amount":2535637.954},
+{"date":"2025-07-18","open":88.75,"high":89.13,"low":87.93,"close":88.51,"vol":219959.93,"amount":1948101.635},
+{"date":"2025-07-21","open":88.45,"high":89.52,"low":88.04,"close":89.02,"vol":222719.15,"amount":1983498.56},
+{"date":"2025-07-22","open":88.7,"high":90.55,"low":88.5,"close":89.08,"vol":297420.68,"amount":2662984.479},
+{"date":"2025-07-23","open":88.9,"high":90.19,"low":88.3,"close":89.39,"vol":316549.41,"amount":2831683.379},
+{"date":"2025-07-24","open":89.1,"high":92.9,"low":89.0,"close":91.75,"vol":522324.53,"amount":4779308.503},
+{"date":"2025-07-25","open":91.74,"high":93.68,"low":90.99,"close":93.47,"vol":442124.79,"amount":4076414.682},
+{"date":"2025-07-28","open":93.64,"high":93.69,"low":91.96,"close":92.18,"vol":342640.05,"amount":3167887.757},
+{"date":"2025-07-29","open":92.0,"high":92.63,"low":90.81,"close":92.17,"vol":294142.08,"amount":2699803.673},
+{"date":"2025-07-30","open":91.7,"high":91.83,"low":89.74,"close":90.36,"vol":310018.59,"amount":2815721.986},
+{"date":"2025-07-31","open":90.32,"high":92.75,"low":89.46,"close":89.5,"vol":461988.52,"amount":4187082.774},
+{"date":"2025-08-01","open":89.2,"high":90.33,"low":88.02,"close":88.29,"vol":274140.33,"amount":2439842.712},
+{"date":"2025-08-04","open":87.95,"high":90.63,"low":87.88,"close":90.07,"vol":286057.6,"amount":2568808.038},
+{"date":"2025-08-05","open":89.85,"high":90.58,"low":89.58,"close":90.0,"vol":195679.4,"amount":1761818.589},
+{"date":"2025-08-06","open":89.86,"high":91.0,"low":89.53,"close":90.78,"vol":267797.87,"amount":2418543.09},
+{"date":"2025-08-07","open":90.7,"high":91.7,"low":89.75,"close":90.59,"vol":315259.94,"amount":2859638.85},
+{"date":"2025-08-08","open":88.0,"high":88.5,"low":86.66,"close":86.66,"vol":584730.5,"amount":5098977.106},
+{"date":"2025-08-11","open":86.69,"high":87.18,"low":86.22,"close":86.96,"vol":279193.14,"amount":2423559.078},
+{"date":"2025-08-12","open":86.95,"high":90.1,"low":86.42,"close":88.52,"vol":551552.4,"amount":4870773.398},
+{"date":"2025-08-13","open":88.01,"high":89.23,"low":88.0,"close":88.66,"vol":384304.42,"amount":3405728.487},
+{"date":"2025-08-14","open":88.69,"high":92.58,"low":88.69,"close":89.46,"vol":741492.26,"amount":6741604.128},
+{"date":"2025-08-15","open":89.0,"high":93.3,"low":88.48,"close":91.84,"vol":690499.46,"amount":6288369.53},
+{"date":"2025-08-18","open":93.5,"high":95.17,"low":91.36,"close":92.31,"vol":833423.13,"amount":7749849.746},
+{"date":"2025-08-19","open":91.67,"high":92.48,"low":89.35,"close":89.35,"vol":744652.14,"amount":6762914.098},
+{"date":"2025-08-20","open":89.4,"high":92.49,"low":88.19,"close":92.28,"vol":858745.56,"amount":7756060.795},
+{"date":"2025-08-21","open":92.3,"high":94.11,"low":90.8,"close":91.05,"vol":606826.05,"amount":5593619.618},
+{"date":"2025-08-22","open":92.5,"high":105.0,"low":92.42,"close":103.97,"vol":2061948.09,"amount":20322967.7},
+{"date":"2025-08-25","open":106.0,"high":109.24,"low":101.1,"close":103.17,"vol":1760636.98,"amount":18348502.386},
+{"date":"2025-08-26","open":101.0,"high":102.57,"low":100.13,"close":100.93,"vol":856074.09,"amount":8663988.281},
+{"date":"2025-08-27","open":102.2,"high":106.69,"low":100.59,"close":101.51,"vol":1422620.71,"amount":14762335.293},
+{"date":"2025-08-28","open":102.0,"high":119.22,"low":101.99,"close":119.22,"vol":2420325.11,"amount":27118768.322},
+{"date":"2025-08-29","open":114.0,"high":116.0,"low":112.26,"close":114.76,"vol":1639670.37,"amount":18711478.532},
+{"date":"2025-09-09","open":102.0,"high":108.65,"low":101.2,"close":102.99,"vol":1574695.7,"amount":16482005.03},
+{"date":"2025-09-10","open":103.0,"high":105.96,"low":102.13,"close":103.91,"vol":1039925.7,"amount":10822524.036},
+{"date":"2025-09-11","open":102.62,"high":112.8,"low":99.98,"close":110.28,"vol":1467501.66,"amount":15776091.423},
+{"date":"2025-09-12","open":109.28,"high":112.49,"low":108.01,"close":108.42,"vol":1159022.04,"amount":12730296.246},
+{"date":"2025-09-15","open":110.55,"high":112.55,"low":107.5,"close":108.66,"vol":946836.18,"amount":10395575.384},
+{"date":"2025-09-16","open":109.0,"high":111.86,"low":108.09,"close":109.78,"vol":866259.24,"amount":9501062.259},
+{"date":"2025-09-17","open":110.8,"high":120.8,"low":109.8,"close":117.39,"vol":1528475.61,"amount":17861084.416},
+{"date":"2025-09-18","open":119.98,"high":127.49,"low":116.35,"close":122.15,"vol":1931567.78,"amount":23495279.107},
+{"date":"2025-09-19","open":123.0,"high":127.4,"low":120.11,"close":121.34,"vol":1449106.23,"amount":17943778.048},
+{"date":"2025-09-22","open":120.54,"high":129.83,"low":119.05,"close":128.92,"vol":1588281.47,"amount":19858613.711},
+{"date":"2025-09-23","open":127.64,"high":129.33,"low":122.63,"close":128.51,"vol":1441273.53,"amount":18120121.818},
+{"date":"2025-09-24","open":126.88,"high":137.98,"low":126.23,"close":134.98,"vol":1460947.53,"amount":19497523.266},
+{"date":"2025-09-25","open":133.0,"high":137.8,"low":132.31,"close":134.11,"vol":1032583.21,"amount":13953307.668},
+{"date":"2025-09-26","open":132.71,"high":135.95,"low":131.2,"close":132.27,"vol":912445.19,"amount":12181639.386},
+{"date":"2025-09-29","open":131.0,"high":136.02,"low":129.16,"close":136.02,"vol":1027207.23,"amount":13627566.349},
+{"date":"2025-09-30","open":138.5,"high":142.0,"low":136.6,"close":140.13,"vol":986229.0,"amount":13794113.059},
+{"date":"2025-10-09","open":144.0,"high":153.0,"low":137.0,"close":138.91,"vol":1662841.1,"amount":24249284.345},
+{"date":"2025-10-10","open":134.87,"high":134.94,"low":127.17,"close":127.95,"vol":1617420.76,"amount":21074152.02},
+{"date":"2025-10-13","open":126.0,"high":136.48,"low":126.0,"close":136.47,"vol":1402994.86,"amount":18642587.057},
+{"date":"2025-10-14","open":136.96,"high":137.8,"low":125.8,"close":127.2,"vol":1321004.03,"amount":17321652.001},
+{"date":"2025-10-15","open":127.18,"high":129.73,"low":124.6,"close":129.56,"vol":807987.26,"amount":10284318.328},
+{"date":"2025-10-16","open":127.8,"high":130.28,"low":126.6,"close":127.3,"vol":612310.62,"amount":7841134.057},
+{"date":"2025-10-17","open":126.85,"high":127.32,"low":120.87,"close":121.98,"vol":820528.98,"amount":10097285.54},
+{"date":"2025-10-20","open":124.1,"high":125.18,"low":121.69,"close":122.63,"vol":571239.35,"amount":7060333.63},
+{"date":"2025-10-21","open":123.8,"high":127.85,"low":122.61,"close":127.19,"vol":784150.88,"amount":9888217.346},
+{"date":"2025-10-22","open":125.42,"high":129.27,"low":123.81,"close":126.81,"vol":653954.11,"amount":8265031.817},
+{"date":"2025-10-23","open":125.18,"high":128.5,"low":124.01,"close":128.3,"vol":634264.02,"amount":8038110.025},
+{"date":"2025-10-24","open":130.3,"high":134.8,"low":128.9,"close":134.06,"vol":1024466.21,"amount":13548726.657},
+{"date":"2025-10-27","open":137.5,"high":137.5,"low":132.3,"close":134.5,"vol":1012643.04,"amount":13623206.912},
+{"date":"2025-10-28","open":133.0,"high":135.8,"low":132.0,"close":132.69,"vol":695189.45,"amount":9299045.972},
+{"date":"2025-10-29","open":132.0,"high":134.53,"low":130.31,"close":133.0,"vol":688460.74,"amount":9111437.51},
+{"date":"2025-10-30","open":133.0,"high":133.0,"low":128.51,"close":128.55,"vol":692863.97,"amount":9018982.748},
+{"date":"2025-10-31","open":128.03,"high":128.7,"low":124.18,"close":124.18,"vol":691668.89,"amount":8692098.673},
+{"date":"2025-11-03","open":122.0,"high":122.6,"low":117.55,"close":120.21,"vol":747709.27,"amount":8940382.093},
+{"date":"2025-11-04","open":121.0,"high":122.66,"low":119.0,"close":119.88,"vol":477384.17,"amount":5770504.489},
+{"date":"2025-11-05","open":116.9,"high":121.1,"low":116.5,"close":119.78,"vol":485016.0,"amount":5753269.424},
+{"date":"2025-11-06","open":121.9,"high":125.99,"low":121.05,"close":124.85,"vol":731507.65,"amount":9060521.121},
+{"date":"2025-11-07","open":122.93,"high":124.18,"low":122.05,"close":122.11,"vol":382292.14,"amount":4694221.497},
+{"date":"2025-11-10","open":122.13,"high":122.95,"low":118.76,"close":120.01,"vol":395832.71,"amount":4749065.264},
+{"date":"2025-11-11","open":120.6,"high":121.47,"low":117.53,"close":117.73,"vol":342530.08,"amount":4073862.296},
+{"date":"2025-11-12","open":117.0,"high":119.8,"low":115.74,"close":119.63,"vol":457015.52,"amount":5405408.039},
+{"date":"2025-11-13","open":118.99,"high":123.33,"low":117.8,"close":123.1,"vol":549888.53,"amount":6638319.087},
+{"date":"2025-11-14","open":123.0,"high":125.5,"low":117.89,"close":118.18,"vol":775293.52,"amount":9432871.553},
+{"date":"2025-11-17","open":116.82,"high":119.29,"low":116.51,"close":117.63,"vol":421773.41,"amount":4961789.944},
+{"date":"2025-11-18","open":117.5,"high":120.18,"low":117.13,"close":117.96,"vol":473915.08,"amount":5629538.134},
+{"date":"2025-11-19","open":117.99,"high":118.49,"low":115.51,"close":116.28,"vol":415119.56,"amount":4848790.041},
+{"date":"2025-11-20","open":117.99,"high":118.29,"low":116.46,"close":116.78,"vol":344702.85,"amount":4045624.435},
+{"date":"2025-11-21","open":113.86,"high":116.08,"low":113.0,"close":113.0,"vol":461358.62,"amount":5264860.634},
+{"date":"2025-11-24","open":112.99,"high":113.5,"low":108.18,"close":111.51,"vol":557908.63,"amount":6159093.355},
+{"date":"2025-11-25","open":112.5,"high":113.96,"low":111.37,"close":111.68,"vol":407223.82,"amount":4584278.768},
+{"date":"2025-11-26","open":110.7,"high":113.9,"low":110.61,"close":112.71,"vol":419553.57,"amount":4731195.304},
+{"date":"2025-11-27","open":113.8,"high":116.8,"low":112.56,"close":112.71,"vol":523431.12,"amount":6012840.143},
+{"date":"2025-11-28","open":112.71,"high":114.11,"low":111.4,"close":113.6,"vol":308663.84,"amount":3486790.036},
+{"date":"2025-12-01","open":113.4,"high":114.68,"low":112.6,"close":114.4,"vol":327640.04,"amount":3724984.486},
+{"date":"2025-12-02","open":114.1,"high":114.19,"low":112.7,"close":113.0,"vol":237771.82,"amount":2694922.636},
+{"date":"2025-12-03","open":112.8,"high":113.69,"low":111.13,"close":111.62,"vol":245413.59,"amount":2756774.41},
+{"date":"2025-12-04","open":111.65,"high":114.73,"low":110.98,"close":114.73,"vol":387551.96,"amount":4392462.735},
+{"date":"2025-12-05","open":114.0,"high":114.88,"low":112.5,"close":114.18,"vol":352653.66,"amount":4015690.336},
+{"date":"2025-12-08","open":114.21,"high":118.0,"low":114.18,"close":117.2,"vol":508359.77,"amount":5945081.548},
+{"date":"2025-12-09","open":115.58,"high":117.9,"low":115.51,"close":116.32,"vol":371384.45,"amount":4333826.426},
+{"date":"2025-12-10","open":115.58,"high":116.59,"low":113.44,"close":116.31,"vol":315714.73,"amount":3624511.935},
+{"date":"2025-12-11","open":116.53,"high":117.14,"low":113.5,"close":113.61,"vol":303108.96,"amount":3488207.042},
+{"date":"2025-12-12","open":113.61,"high":117.42,"low":111.6,"close":116.8,"vol":584998.04,"amount":6734945.965},
+{"date":"2025-12-15","open":115.15,"high":116.5,"low":113.0,"close":113.01,"vol":342417.46,"amount":3933791.146},
+{"date":"2025-12-16","open":112.5,"high":113.35,"low":110.27,"close":110.7,"vol":323379.53,"amount":3605859.884},
+{"date":"2025-12-17","open":110.82,"high":113.9,"low":110.13,"close":113.29,"vol":343892.72,"amount":3848931.232},
+{"date":"2025-12-18","open":112.8,"high":115.72,"low":112.75,"close":112.8,"vol":314700.29,"amount":3583327.202},
+{"date":"2025-12-19","open":113.2,"high":115.48,"low":113.0,"close":113.63,"vol":272612.5,"amount":3107493.842},
+{"date":"2025-12-22","open":114.6,"high":121.44,"low":114.6,"close":120.45,"vol":810113.69,"amount":9622360.396},
+{"date":"2025-12-23","open":120.5,"high":121.58,"low":119.02,"close":119.9,"vol":483601.42,"amount":5823920.043},
+{"date":"2025-12-24","open":122.5,"high":124.38,"low":121.11,"close":123.41,"vol":629560.98,"amount":7744549.16},
+{"date":"2025-12-25","open":123.0,"high":125.99,"low":122.66,"close":123.08,"vol":471809.58,"amount":5854142.202},
+{"date":"2025-12-26","open":122.58,"high":124.79,"low":121.16,"close":122.1,"vol":402397.99,"amount":4938389.58},
+{"date":"2025-12-29","open":123.0,"high":125.65,"low":122.02,"close":122.5,"vol":506831.61,"amount":6280270.177},
+{"date":"2025-12-30","open":124.45,"high":126.69,"low":124.0,"close":125.28,"vol":604958.31,"amount":7582347.029},
+{"date":"2025-12-31","open":125.99,"high":126.2,"low":122.4,"close":122.83,"vol":411586.85,"amount":5082728.445},
+{"date":"2026-01-05","open":126.84,"high":130.17,"low":126.2,"close":129.95,"vol":911394.04,"amount":11742866.839},
+{"date":"2026-01-06","open":129.0,"high":134.2,"low":128.77,"close":131.84,"vol":730696.95,"amount":9623978.218},
+{"date":"2026-01-07","open":131.84,"high":132.82,"low":128.85,"close":129.98,"vol":598040.86,"amount":7783876.099},
+{"date":"2026-01-08","open":128.95,"high":134.68,"low":128.91,"close":130.15,"vol":616918.81,"amount":8145423.327},
+{"date":"2026-01-09","open":129.15,"high":130.01,"low":127.77,"close":128.88,"vol":511274.88,"amount":6581947.276},
+{"date":"2026-01-12","open":128.52,"high":129.62,"low":126.68,"close":127.66,"vol":563935.64,"amount":7202156.993},
+{"date":"2026-01-13","open":127.49,"high":128.15,"low":122.86,"close":123.63,"vol":652072.8,"amount":8154109.676},
+{"date":"2026-01-14","open":123.51,"high":127.6,"low":123.5,"close":124.49,"vol":649683.91,"amount":8155390.623},
+{"date":"2026-01-15","open":123.49,"high":125.5,"low":122.33,"close":124.44,"vol":556604.23,"amount":6895087.6},
+{"date":"2026-01-16","open":127.5,"high":128.82,"low":124.88,"close":126.99,"vol":756512.57,"amount":9597582.828},
+{"date":"2026-01-19","open":127.05,"high":128.5,"low":125.12,"close":125.29,"vol":477537.02,"amount":6024303.737},
+{"date":"2026-01-20","open":125.0,"high":125.5,"low":121.81,"close":122.18,"vol":508693.59,"amount":6261665.024},
+{"date":"2026-01-21","open":120.93,"high":128.89,"low":120.58,"close":127.19,"vol":970525.21,"amount":12294760.582},
+{"date":"2026-01-22","open":128.98,"high":130.82,"low":125.57,"close":126.8,"vol":648094.63,"amount":8268996.067},
+{"date":"2026-01-23","open":126.8,"high":127.37,"low":124.03,"close":124.96,"vol":490631.04,"amount":6130483.631},
+{"date":"2026-01-26","open":124.01,"high":125.88,"low":121.9,"close":121.92,"vol":502566.5,"amount":6184618.809},
+{"date":"2026-01-27","open":122.0,"high":125.74,"low":119.22,"close":124.05,"vol":655261.57,"amount":8023170.134},
+{"date":"2026-01-28","open":124.99,"high":128.99,"low":124.99,"close":128.55,"vol":994583.26,"amount":12644229.527},
+{"date":"2026-01-29","open":127.6,"high":127.81,"low":122.16,"close":122.4,"vol":715649.35,"amount":8897091.559},
+{"date":"2026-01-30","open":121.33,"high":124.94,"low":120.07,"close":122.97,"vol":527719.06,"amount":6468951.529},
+{"date":"2026-02-02","open":121.4,"high":122.59,"low":116.8,"close":117.06,"vol":596690.81,"amount":7104970.929},
+{"date":"2026-02-03","open":118.69,"high":118.84,"low":113.46,"close":116.03,"vol":561769.52,"amount":6500024.016},
+{"date":"2026-02-04","open":114.5,"high":114.99,"low":113.15,"close":114.84,"vol":351393.47,"amount":4005035.637},
+{"date":"2026-02-05","open":112.99,"high":114.5,"low":110.39,"close":111.8,"vol":446447.65,"amount":4982588.635},
+{"date":"2026-02-06","open":110.14,"high":114.6,"low":110.14,"close":112.7,"vol":408226.91,"amount":4597784.625},
+{"date":"2026-02-09","open":114.8,"high":115.07,"low":113.7,"close":114.93,"vol":321018.1,"amount":3676020.764},
+{"date":"2026-02-10","open":115.2,"high":116.9,"low":114.85,"close":116.2,"vol":340436.51,"amount":3949080.646},
+{"date":"2026-02-11","open":114.0,"high":116.14,"low":113.5,"close":115.01,"vol":345336.73,"amount":3955491.126},
+{"date":"2026-02-12","open":115.55,"high":117.18,"low":115.11,"close":116.58,"vol":333622.54,"amount":3880738.366},
+{"date":"2026-02-13","open":116.23,"high":117.98,"low":115.56,"close":116.93,"vol":343687.4,"amount":4020570.46},
+{"date":"2026-02-24","open":118.03,"high":118.18,"low":115.62,"close":115.82,"vol":276155.68,"amount":3217730.655},
+{"date":"2026-02-25","open":117.0,"high":117.5,"low":115.85,"close":116.13,"vol":275528.56,"amount":3214693.555},
+{"date":"2026-02-26","open":116.13,"high":117.23,"low":114.29,"close":116.65,"vol":327021.83,"amount":3787597.479},
+{"date":"2026-02-27","open":115.03,"high":115.87,"low":114.32,"close":115.0,"vol":279308.78,"amount":3213704.146},
+{"date":"2026-03-02","open":112.88,"high":114.2,"low":112.3,"close":112.53,"vol":349784.75,"amount":3952733.063},
+{"date":"2026-03-03","open":113.23,"high":114.75,"low":107.69,"close":108.31,"vol":540987.0,"amount":5976584.863},
+{"date":"2026-03-04","open":107.32,"high":109.7,"low":106.12,"close":106.69,"vol":322749.58,"amount":3470640.119},
+{"date":"2026-03-05","open":108.6,"high":109.26,"low":106.09,"close":106.9,"vol":353531.81,"amount":3803229.096},
+{"date":"2026-03-06","open":107.0,"high":108.34,"low":106.17,"close":106.5,"vol":340486.16,"amount":3648254.394},
+{"date":"2026-03-09","open":103.97,"high":105.79,"low":101.63,"close":105.14,"vol":393559.67,"amount":4065897.45},
+{"date":"2026-03-10","open":106.9,"high":107.75,"low":105.7,"close":107.28,"vol":318321.9,"amount":3400130.457},
+{"date":"2026-03-11","open":107.23,"high":108.8,"low":107.0,"close":107.1,"vol":279982.97,"amount":3016803.608},
+{"date":"2026-03-12","open":107.0,"high":108.55,"low":104.95,"close":106.01,"vol":288819.77,"amount":3075181.737},
+{"date":"2026-03-13","open":105.02,"high":107.83,"low":104.5,"close":107.06,"vol":341633.26,"amount":3642164.903},
+{"date":"2026-03-16","open":106.31,"high":110.32,"low":105.5,"close":108.6,"vol":422554.97,"amount":4559220.659},
+{"date":"2026-03-17","open":108.54,"high":108.58,"low":105.99,"close":106.02,"vol":295718.04,"amount":3173439.587},
+{"date":"2026-03-18","open":105.78,"high":106.88,"low":105.25,"close":106.6,"vol":263345.92,"amount":2794678.901},
+{"date":"2026-03-19","open":105.01,"high":107.69,"low":104.51,"close":105.96,"vol":378655.95,"amount":4001785.717},
+{"date":"2026-03-20","open":105.2,"high":105.72,"low":102.18,"close":102.18,"vol":381294.75,"amount":3960183.826},
+{"date":"2026-03-23","open":100.01,"high":101.99,"low":97.4,"close":98.04,"vol":506671.26,"amount":5040929.175},
+{"date":"2026-03-24","open":98.9,"high":99.37,"low":97.25,"close":99.25,"vol":336803.26,"amount":3314641.85},
+{"date":"2026-03-25","open":99.67,"high":100.94,"low":99.28,"close":99.99,"vol":321306.43,"amount":3215491.219},
+{"date":"2026-03-26","open":99.55,"high":99.7,"low":96.55,"close":96.88,"vol":313198.89,"amount":3067688.006},
+{"date":"2026-03-27","open":96.0,"high":98.39,"low":95.87,"close":97.5,"vol":280875.27,"amount":2738255.865},
+{"date":"2026-03-30","open":95.8,"high":96.19,"low":94.0,"close":95.83,"vol":328870.03,"amount":3130020.525},
+{"date":"2026-03-31","open":95.8,"high":97.4,"low":94.0,"close":94.05,"vol":293839.03,"amount":2809492.923},
+{"date":"2026-04-01","open":96.4,"high":96.7,"low":94.81,"close":96.33,"vol":325648.08,"amount":3121615.312},
+{"date":"2026-04-02","open":95.5,"high":95.79,"low":92.51,"close":93.2,"vol":293828.32,"amount":2760191.974},
+{"date":"2026-04-03","open":93.41,"high":93.94,"low":91.76,"close":91.78,"vol":216461.63,"amount":2004261.621},
+{"date":"2026-04-07","open":91.5,"high":96.99,"low":91.2,"close":95.62,"vol":458242.31,"amount":4340589.11},
+{"date":"2026-04-08","open":99.02,"high":101.54,"low":99.02,"close":101.18,"vol":544697.12,"amount":5458085.866},
+{"date":"2026-04-09","open":99.4,"high":101.2,"low":99.2,"close":99.72,"vol":310716.53,"amount":3111335.889},
+{"date":"2026-04-10","open":101.0,"high":102.79,"low":100.68,"close":101.01,"vol":406305.14,"amount":4130861.809},
+{"date":"2026-04-13","open":99.85,"high":102.8,"low":99.72,"close":100.64,"vol":351885.22,"amount":3554994.262},
+{"date":"2026-04-14","open":102.1,"high":102.28,"low":100.38,"close":101.52,"vol":370910.59,"amount":3760621.304},
+{"date":"2026-04-15","open":102.05,"high":106.1,"low":101.8,"close":103.91,"vol":704839.0,"amount":7336887.912},
+{"date":"2026-04-16","open":103.5,"high":105.0,"low":103.0,"close":104.18,"vol":393721.35,"amount":4092706.42},
+{"date":"2026-04-17","open":103.82,"high":107.3,"low":103.27,"close":105.23,"vol":503755.27,"amount":5313222.52},
+{"date":"2026-04-20","open":105.93,"high":108.6,"low":105.01,"close":107.96,"vol":547702.62,"amount":5872447.693},
+{"date":"2026-04-21","open":107.33,"high":108.15,"low":105.68,"close":107.46,"vol":372584.25,"amount":3976054.595},
+{"date":"2026-04-22","open":106.8,"high":108.08,"low":106.5,"close":107.87,"vol":375216.74,"amount":4023321.89},
+{"date":"2026-04-23","open":108.88,"high":109.12,"low":105.2,"close":105.98,"vol":441491.01,"amount":4724880.091},
+{"date":"2026-04-24","open":105.58,"high":113.25,"low":104.61,"close":110.96,"vol":910703.63,"amount":9980491.748},
+{"date":"2026-04-27","open":113.25,"high":117.69,"low":112.6,"close":116.58,"vol":970295.86,"amount":11249548.325},
+{"date":"2026-04-28","open":115.24,"high":117.64,"low":113.02,"close":114.0,"vol":625007.3,"amount":7209850.228},
+{"date":"2026-04-29","open":113.35,"high":113.82,"low":109.78,"close":112.47,"vol":514882.54,"amount":5750212.698},
+{"date":"2026-04-30","open":113.31,"high":119.88,"low":113.3,"close":118.73,"vol":1018382.85,"amount":11911527.206},
+{"date":"2026-05-06","open":122.0,"high":128.12,"low":121.74,"close":123.1,"vol":1292940.51,"amount":16176667.799},
+{"date":"2026-05-07","open":125.11,"high":127.48,"low":122.22,"close":125.34,"vol":842774.03,"amount":10482928.52},
+{"date":"2026-05-08","open":122.9,"high":123.19,"low":120.05,"close":120.31,"vol":708618.1,"amount":8595731.864},
+{"date":"2026-05-11","open":122.99,"high":124.57,"low":121.9,"close":122.52,"vol":814859.72,"amount":10017304.327},
+{"date":"2026-05-12","open":124.44,"high":125.44,"low":120.0,"close":121.98,"vol":817732.34,"amount":10018643.228},
+{"date":"2026-05-13","open":119.0,"high":122.5,"low":116.04,"close":121.86,"vol":954951.48,"amount":11374279.337},
+{"date":"2026-05-14","open":121.92,"high":124.04,"low":117.0,"close":117.9,"vol":790650.15,"amount":9451219.953},
+{"date":"2026-05-15","open":121.0,"high":125.0,"low":118.48,"close":119.02,"vol":1328100.54,"amount":16152497.227},
+{"date":"2026-05-18","open":117.4,"high":120.34,"low":115.6,"close":117.62,"vol":748969.19,"amount":8855418.364},
+{"date":"2026-05-19","open":116.16,"high":118.88,"low":112.68,"close":118.82,"vol":840269.78,"amount":9713877.346},
+{"date":"2026-05-20","open":118.0,"high":136.63,"low":117.5,"close":133.81,"vol":2248800.56,"amount":28996720.135},
+{"date":"2026-05-21","open":134.0,"high":137.63,"low":127.1,"close":127.22,"vol":1546776.71,"amount":20601829.525},
+{"date":"2026-05-22","open":129.33,"high":132.18,"low":126.5,"close":131.33,"vol":1199477.88,"amount":15516843.653},
+{"date":"2026-05-25","open":136.0,"high":157.6,"low":136.0,"close":156.0,"vol":2521802.26,"amount":37253708.024},
+{"date":"2026-05-26","open":150.73,"high":154.44,"low":145.5,"close":149.18,"vol":1799242.41,"amount":26787296.677},
+{"date":"2026-05-27","open":150.0,"high":153.52,"low":145.0,"close":146.22,"vol":1234983.75,"amount":18473692.356},
+{"date":"2026-05-28","open":146.0,"high":159.05,"low":146.0,"close":153.7,"vol":1608231.75,"amount":24822318.598},
+{"date":"2026-05-29","open":150.92,"high":152.38,"low":138.49,"close":139.91,"vol":1536812.64,"amount":22138462.395},
+{"date":"2026-06-01","open":139.76,"high":140.8,"low":132.04,"close":132.44,"vol":1008849.14,"amount":13645017.172},
+{"date":"2026-06-02","open":132.98,"high":135.5,"low":129.3,"close":132.48,"vol":923688.2,"amount":12256037.221},
+{"date":"2026-06-03","open":132.0,"high":138.75,"low":131.85,"close":134.0,"vol":992127.45,"amount":13487781.965},
+{"date":"2026-06-04","open":131.0,"high":137.57,"low":130.0,"close":134.88,"vol":778526.88,"amount":10493292.686},
+{"date":"2026-06-05","open":131.0,"high":134.75,"low":126.7,"close":127.4,"vol":934574.33,"amount":12150117.807},
+{"date":"2026-06-08","open":120.0,"high":124.28,"low":120.0,"close":121.92,"vol":781225.59,"amount":9545783.582},
+{"date":"2026-06-09","open":123.5,"high":128.03,"low":120.89,"close":127.3,"vol":769662.77,"amount":9607775.526},
+{"date":"2026-06-10","open":125.0,"high":131.18,"low":124.5,"close":125.34,"vol":669094.14,"amount":8511488.618},
+{"date":"2026-06-11","open":124.0,"high":129.08,"low":123.01,"close":127.4,"vol":626275.99,"amount":7935636.355},
+{"date":"2026-06-12","open":131.64,"high":134.87,"low":124.37,"close":124.88,"vol":817437.29,"amount":10575818.607},
+{"date":"2026-06-15","open":128.59,"high":131.0,"low":124.89,"close":130.52,"vol":728604.09,"amount":9404695.623},
+{"date":"2026-06-16","open":131.0,"high":134.34,"low":127.93,"close":130.14,"vol":745583.01,"amount":9738547.521},
+{"date":"2026-06-17","open":127.91,"high":134.88,"low":126.68,"close":134.7,"vol":963562.12,"amount":12699097.858},
+{"date":"2026-06-18","open":136.11,"high":144.63,"low":132.88,"close":140.7,"vol":1244937.14,"amount":17289251.566},
+{"date":"2026-06-22","open":140.78,"high":148.0,"low":140.0,"close":145.59,"vol":1060960.58,"amount":15251149.626},
+{"date":"2026-06-23","open":143.58,"high":148.3,"low":139.6,"close":141.7,"vol":918201.09,"amount":13211881.994},
+{"date":"2026-06-24","open":141.5,"high":156.35,"low":141.32,"close":151.53,"vol":1411623.83,"amount":21160854.009},
+{"date":"2026-06-25","open":152.0,"high":158.66,"low":151.0,"close":156.86,"vol":1186102.37,"amount":18470621.628},
+{"date":"2026-06-26","open":153.7,"high":156.22,"low":146.5,"close":148.76,"vol":1076155.43,"amount":16171921.139},
+{"date":"2026-06-29","open":147.8,"high":152.99,"low":141.0,"close":151.0,"vol":1027401.01,"amount":15158412.01},
+{"date":"2026-06-30","open":152.05,"high":160.66,"low":150.0,"close":158.82,"vol":1066795.41,"amount":16679545.014},
+{"date":"2026-07-01","open":160.19,"high":166.88,"low":152.31,"close":154.48,"vol":1146777.18,"amount":18327904.135},
+{"date":"2026-07-02","open":146.5,"high":151.69,"low":141.26,"close":144.1,"vol":949023.64,"amount":13942694.264},
+{"date":"2026-07-03","open":144.89,"high":146.45,"low":140.2,"close":140.31,"vol":770411.78,"amount":11011795.924},
+{"date":"2026-07-06","open":143.4,"high":147.86,"low":135.26,"close":143.99,"vol":896630.55,"amount":12737144.923},
+{"date":"2026-07-07","open":142.0,"high":149.51,"low":140.16,"close":145.42,"vol":689117.32,"amount":10086679.237},
+{"date":"2026-07-08","open":148.0,"high":156.98,"low":142.6,"close":152.1,"vol":1000253.03,"amount":15091486.397}
+];
+
+// Sort by date ascending
+rawData.sort((a, b) => a.date.localeCompare(b.date));
+
+// Derived arrays
+const dates = rawData.map(d => d.date);
+const ohlc = rawData.map(d => [d.open, d.close, d.low, d.high]);
+const volumes = rawData.map(d => d.vol);
+const closes = rawData.map(d => d.close);
+
+// Latest data
+const latest = rawData[rawData.length - 1];
+const prev = rawData[rawData.length - 2];
+const changeVal = latest.close - prev.close;
+const changePct = ((changeVal / prev.close) * 100).toFixed(2);
+const isUp = changeVal >= 0;
+
+// Update header
+document.getElementById('headerInfo').innerHTML = `
+    <div class="price-now ${isUp ? 'up' : 'down'}">¥${latest.close.toFixed(2)}</div>
+    <div class="change-info">
+        <span class="change-val ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${changeVal.toFixed(2)}</span>
+        <span class="change-pct ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${changePct}%</span>
+    </div>
+`;
+
+// Stats
+const startPrice = rawData[0].close;
+const endPrice = latest.close;
+const totalChange = endPrice - startPrice;
+const totalChangePct = ((totalChange / startPrice) * 100).toFixed(2);
+const highest = Math.max(...rawData.map(d => d.high));
+const lowest = Math.min(...rawData.map(d => d.low));
+const avgVol = (rawData.reduce((s, d) => s + d.vol, 0) / rawData.length).toFixed(0);
+const maxVolDay = rawData.reduce((max, d) => d.vol > max.vol ? d : max, rawData[0]);
+
+document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card">
+        <span class="label">期间涨跌</span>
+        <span class="value ${totalChange >= 0 ? 'up' : 'down'}">${totalChange >= 0 ? '+' : ''}${totalChange.toFixed(2)} (${totalChange >= 0 ? '+' : ''}${totalChangePct}%)</span>
+        <span class="sub">起始 ¥${startPrice.toFixed(2)} → 最新 ¥${endPrice.toFixed(2)}</span>
+    </div>
+    <div class="stat-card">
+        <span class="label">最高价</span>
+        <span class="value up">¥${highest.toFixed(2)}</span>
+        <span class="sub">最低价 ¥${lowest.toFixed(2)}</span>
+    </div>
+    <div class="stat-card">
+        <span class="label">日均成交量</span>
+        <span class="value">${(avgVol / 10000).toFixed(0)}万</span>
+        <span class="sub">共 ${rawData.length} 个交易日</span>
+    </div>
+    <div class="stat-card">
+        <span class="label">最大成交量日</span>
+        <span class="value">${(maxVolDay.vol / 10000).toFixed(0)}万</span>
+        <span class="sub">${maxVolDay.date} · 收盘 ¥${maxVolDay.close.toFixed(2)}</span>
+    </div>
+`;
+
+// ── ECharts K-line ──
+const kChart = echarts.init(document.getElementById('kChart'));
+const vChart = echarts.init(document.getElementById('vChart'));
+
+// Common color
+const upColor = '#ff4d4f';
+const downColor = '#52c41a';
+
+function buildKOption(dataSlice) {
+    return {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'cross' },
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            borderColor: '#e8e8e8',
+            textStyle: { color: '#333' },
+            formatter: function(params) {
+                const d = params[0];
+                if (!d) return '';
+                const vals = d.data;
+                const change = vals[2] - vals[1];
+                const pct = ((change / vals[1]) * 100).toFixed(2);
+                const sign = change >= 0 ? '+' : '';
+                return `
+                    <div style="font-weight:700;margin-bottom:4px;">${d.axisValue}</div>
+                    <div>开盘：<b>${vals[1].toFixed(2)}</b></div>
+                    <div>收盘：<b style="color:${change >= 0 ? upColor : downColor}">${vals[2].toFixed(2)}</b></div>
+                    <div>最高：<b>${vals[4].toFixed(2)}</b></div>
+                    <div>最低：<b>${vals[3].toFixed(2)}</b></div>
+                    <div>涨跌：<b style="color:${change >= 0 ? upColor : downColor}">${sign}${change.toFixed(2)} (${sign}${pct}%)</b></div>
+                `;
+            }
+        },
+        grid: { left: '8%', right: '3%', top: 20, bottom: 40 },
+        xAxis: {
+            type: 'category',
+            data: dataSlice.map(d => d.date),
+            axisLine: { lineStyle: { color: '#d9d9d9' } },
+            axisLabel: { color: '#666', fontSize: 11 },
+            boundaryGap: true,
+            axisTick: { show: false }
+        },
+        yAxis: {
+            type: 'value',
+            scale: true,
+            splitLine: { lineStyle: { color: '#f0f0f0' } },
+            axisLabel: { color: '#666', fontSize: 11, formatter: '¥{value}' }
+        },
+        dataZoom: [
+            { type: 'inside', start: 0, end: 100 },
+            { type: 'slider', start: 0, end: 100, height: 24, bottom: 8,
+              borderColor: '#e8e8e8', backgroundColor: '#fafafa',
+              fillerColor: 'rgba(22,119,255,0.1)',
+              handleStyle: { color: '#1677ff' },
+              textStyle: { fontSize: 10 }
+            }
+        ],
+        series: [{
+            type: 'candlestick',
+            data: dataSlice.map(d => [d.open, d.close, d.low, d.high]),
+            itemStyle: {
+                color: upColor,
+                color0: downColor,
+                borderColor: upColor,
+                borderColor0: downColor
+            },
+            markLine: {
+                silent: true,
+                symbol: 'none',
+                data: [
+                    { yAxis: dataSlice[0].close, lineStyle: { color: '#1677ff', type: 'dashed', width: 1, opacity: 0.6 } }
+                ],
+                label: { show: false }
+            }
+        }]
+    };
+}
+
+function buildVOption(dataSlice) {
+    return {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            borderColor: '#e8e8e8',
+            textStyle: { color: '#333' },
+            formatter: function(params) {
+                const d = params[0];
+                return `<div style="font-weight:700;margin-bottom:4px;">${d.axisValue}</div><div>成交量：<b>${(d.value / 10000).toFixed(0)}万</b></div>`;
+            }
+        },
+        grid: { left: '8%', right: '3%', top: 10, bottom: 30 },
+        xAxis: {
+            type: 'category',
+            data: dataSlice.map(d => d.date),
+            axisLine: { lineStyle: { color: '#d9d9d9' } },
+            axisLabel: { color: '#666', fontSize: 10 },
+            axisTick: { show: false }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { color: '#666', fontSize: 10, formatter: v => (v / 10000).toFixed(0) + '万' },
+            splitLine: { lineStyle: { color: '#f0f0f0' } }
+        },
+        dataZoom: [
+            { type: 'inside', start: 0, end: 100 },
+            { type: 'slider', start: 0, end: 100, height: 20, bottom: 4,
+              borderColor: '#e8e8e8', backgroundColor: '#fafafa',
+              fillerColor: 'rgba(22,119,255,0.1)',
+              handleStyle: { color: '#1677ff' },
+              textStyle: { fontSize: 10 }
+            }
+        ],
+        series: [{
+            type: 'bar',
+            data: dataSlice.map((d, i) => {
+                const isRise = d.close >= d.open;
+                return { value: d.vol, itemStyle: { color: isRise ? upColor : downColor, opacity: 0.6 } };
+            }),
+            emphasis: {
+                itemStyle: { opacity: 1 }
+            }
+        }]
+    };
+}
+
+// Initial render
+kChart.setOption(buildKOption(rawData));
+vChart.setOption(buildVOption(rawData));
+
+// Range selector
+function createRangeButtons(containerId, chart, buildFn, allData) {
+    const ranges = [
+        { label: '近1月', days: 22 },
+        { label: '近3月', days: 66 },
+        { label: '近6月', days: 132 },
+        { label: '近1年', days: 250 },
+        { label: '全部', days: 9999 }
+    ];
+    const container = document.getElementById(containerId);
+    ranges.forEach((r, idx) => {
+        const btn = document.createElement('button');
+        btn.textContent = r.label;
+        btn.className = idx === ranges.length - 1 ? 'active' : '';
+        btn.onclick = function() {
+            container.querySelectorAll('button').forEach(b => b.className = '');
+            btn.className = 'active';
+            const slice = r.days >= allData.length ? allData : allData.slice(-r.days);
+            chart.setOption(buildFn(slice));
+        };
+        container.appendChild(btn);
+    });
+}
+
+createRangeButtons('kRangeSelector', kChart, buildKOption, rawData);
+createRangeButtons('vRangeSelector', vChart, buildVOption, rawData);
+
+// Responsive
+window.addEventListener('resize', () => { kChart.resize(); vChart.resize(); });
+</script>
+
+</body>
+</html>
