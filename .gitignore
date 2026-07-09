@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+venv/
+*.egg-info/
+
+# WorkBuddy
+.workbuddy/
+
+# Build scripts
+build_*.py
+save_data.py
+fetch_*.py
+
+# Data (embedded in HTML)
+data/
+*.json
+*.csv
+
+# Config with tokens
+config.py
+requirements.txt
+
+# OS
+.DS_Store
+Thumbs.db
