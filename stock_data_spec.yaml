@@ -1,0 +1,492 @@
+# =============================================================================
+# 股票数据取数规范 (Stock Data Retrieval Specification)
+# =============================================================================
+# 版本: v1.1
+# 创建日期: 2026-07-09
+# 描述: 规范化 A 股核心标的日线行情取数配置，
+#       用于标准化数据采集流程。基于 Tushare Pro API。
+# 数据来源: https://tushare.pro
+# =============================================================================
+
+metadata:
+  version: "1.1"
+  created: "2026-07-09"
+  updated: "2026-07-09"
+  author: "WorkBuddy"
+  description: "典型 A 股公司日线行情数据取数规范"
+  tags: ["a-share", "daily-price", "standardized", "tushare"]
+
+  # 版本变更记录
+  changelog:
+    - version: "1.1"
+      date: "2026-07-09"
+      changes:
+        - "新增 tushare_api 接口映射段，明确每个标的的 API 调用参数"
+        - "新增 field_mapping 字段映射段，对齐 Tushare 返回字段名"
+        - "新增 data_quality 数据质量检查规范（连续缺失、跳空等）"
+        - "新增 stocks 并行取数配置 (batch_config)"
+        - "新增港股代码格式规范说明"
+        - "优化 output.path_template 带 date_range 的完整路径"
+        - "优化 validation 校验规则细化"
+        - "新增 hk_stock_spec 港股取数接口说明"
+
+    - version: "1.0"
+      date: "2026-07-09"
+      changes:
+        - "初始版本，定义 A 股三只核心标的"
+        - "基本字段定义、输出格式、校验规则"
+
+# =============================================================================
+# 数据源配置
+# =============================================================================
+datasource:
+  primary:
+    name: "tushare"
+    type: "api"
+    endpoint: "https://tushare.pro"
+    # 接口文档: https://tushare.pro/document/2
+    token_env_var: "TUSHARE_TOKEN"
+    rate_limit: "200次/分钟 (基础积分)"
+    timeout_seconds: 30
+    retry:
+      max_retries: 3
+      backoff_strategy: "exponential"
+      initial_delay_seconds: 2
+
+  fallback:
+    name: "akshare"
+    type: "python_library"
+    install: "pip install akshare>=1.15.0"
+    timeout_seconds: 60
+    retry:
+      max_retries: 2
+      backoff_strategy: "fixed"
+      initial_delay_seconds: 5
+
+# =============================================================================
+# Tushare Pro API 接口映射
+# =============================================================================
+# 定义每只股票调用的 Tushare API 名称、参数及返回值处理方式
+tushare_api:
+  # A 股日线行情
+  # 接口: pro.daily()
+  # 文档: https://tushare.pro/document/2?doc_id=27
+  a_share_daily:
+    api_function: "daily"
+    description: "A 股日线行情"
+    required_params:
+      - name: "ts_code"
+        type: "string"
+        format: "{code}.{exchange_suffix}"    # 如 688981.SH
+        description: "股票代码 (含交易所后缀)"
+      - name: "start_date"
+        type: "string"
+        format: "YYYYMMDD"
+      - name: "end_date"
+        type: "string"
+        format: "YYYYMMDD"
+    optional_params:
+      - name: "fields"
+        type: "string"
+        description: "逗号分隔的字段列表，不传则返回全部"
+    return_columns:
+      - "ts_code"
+      - "trade_date"
+      - "open"
+      - "high"
+      - "low"
+      - "close"
+      - "pre_close"
+      - "change"
+      - "pct_chg"
+      - "vol"
+      - "amount"
+    adjustment_supported: true                  # 支持复权
+    adjustment_field: "adj_factor"              # 复权因子
+
+  # 港股日线行情
+  # 接口: pro.hk_daily()
+  # 文档: https://tushare.pro/document/2?doc_id=194
+  h_share_daily:
+    api_function: "hk_daily"
+    description: "港股日线行情"
+    required_params:
+      - name: "ts_code"
+        type: "string"
+        format: "{code}.HK"                     # 如 00981.HK
+        description: "港股代码，前缀补零到5位"
+      - name: "start_date"
+        type: "string"
+        format: "YYYYMMDD"
+      - name: "end_date"
+        type: "string"
+        format: "YYYYMMDD"
+    return_columns:
+      - "ts_code"
+      - "trade_date"
+      - "open"
+      - "high"
+      - "low"
+      - "close"
+      - "pre_close"
+      - "change"
+      - "pct_chg"
+      - "vol"
+      - "amount"
+
+# =============================================================================
+# 字段映射 (Tushare API 字段名 ↔ 业务字段名)
+# =============================================================================
+field_mapping:
+  # Tushare 原字段名: {业务描述, 类型, 精度, 单位, 校验规则}
+  ts_code:
+    description: "TS 股票代码"
+    type: "string"
+    format: "6位数字 + 交易所后缀 (.SH / .SZ / .HK)"
+    example: "688981.SH"
+    validation: "must match regex ^[0-9]{6}\\.(SH|SZ)$ (A股)"
+
+  trade_date:
+    description: "交易日"
+    type: "string"
+    format: "YYYYMMDD"
+    example: "20260709"
+    validation: "必须是交易日且 <= 当前日期"
+
+  open:
+    description: "开盘价"
+    type: "float"
+    precision: 2
+    unit: "元"
+    validation: "> 0"
+
+  high:
+    description: "最高价"
+    type: "float"
+    precision: 2
+    unit: "元"
+    validation: ">= open AND >= close"
+
+  low:
+    description: "最低价"
+    type: "float"
+    precision: 2
+    unit: "元"
+    validation: "<= open AND <= close"
+
+  close:
+    description: "收盘价"
+    type: "float"
+    precision: 2
+    unit: "元"
+    validation: "> 0"
+
+  pre_close:
+    description: "昨收价"
+    type: "float"
+    precision: 2
+    unit: "元"
+    validation: "> 0"
+
+  change:
+    description: "涨跌额"
+    type: "float"
+    precision: 2
+    unit: "元"
+    validation: "close - pre_close"
+
+  pct_chg:
+    description: "涨跌幅"
+    type: "float"
+    precision: 2
+    unit: "%"
+    validation: "change / pre_close * 100"
+
+  vol:
+    description: "成交量"
+    type: "integer"
+    unit: "手（1手=100股）"
+    validation: ">= 0"
+
+  amount:
+    description: "成交额"
+    type: "float"
+    precision: 2
+    unit: "千元"
+    validation: ">= 0"
+
+  turnover_rate:
+    description: "换手率"
+    type: "float"
+    precision: 4
+    unit: "%"
+    validation: "[0, 100]"
+
+  pe:
+    description: "市盈率 (动态)"
+    type: "float"
+    precision: 2
+    validation: "> 0 (正常值)"
+
+  pb:
+    description: "市净率"
+    type: "float"
+    precision: 2
+    validation: "> 0 (正常值)"
+
+# =============================================================================
+# 股票标的定义
+# =============================================================================
+stocks:
+  # ------------------- 中芯国际 (SMIC) -------------------
+  - name: "中芯国际"
+    name_en: "SMIC"
+    codes:
+      a_share: "688981.SH"                  # 科创板
+      h_share: "00981.HK"                   # 港股（005位前缀补零）
+    industry: "半导体"
+    exchange: "SSE STAR Market (科创板)"
+    listed_date: "2020-07-16"               # A 股上市日期
+    is_star_market: true                    # 是否为科创板
+    notes: "中国内地规模最大、技术最先进的集成电路芯片代工企业"
+    # Tushare API 调用参数（覆盖默认）
+    api_params:
+      a_share:
+        api: "daily"
+        ts_code: "688981.SH"
+      h_share:
+        api: "hk_daily"
+        ts_code: "00981.HK"
+
+  # ------------------- 长江电力 (Yangtze Power) -------------------
+  - name: "长江电力"
+    name_en: "Yangtze Power"
+    codes:
+      a_share: "600900.SH"                  # 上证主板
+    industry: "电力 / 水电"
+    exchange: "SSE Main Board (上证主板)"
+    listed_date: "2003-11-18"
+    is_star_market: false
+    notes: "中国最大电力上市公司之一，全球最大水电上市公司"
+    api_params:
+      a_share:
+        api: "daily"
+        ts_code: "600900.SH"
+
+  # ------------------- 比亚迪 (BYD) -------------------
+  - name: "比亚迪"
+    name_en: "BYD"
+    codes:
+      a_share: "002594.SZ"                  # 深证主板
+      h_share: "01211.HK"                   # 港股
+    industry: "汽车 / 新能源"
+    exchange: "SZSE Main Board (深证主板)"
+    listed_date: "2011-06-30"
+    is_star_market: false
+    notes: "全球领先的新能源汽车及动力电池制造商"
+    api_params:
+      a_share:
+        api: "daily"
+        ts_code: "002594.SZ"
+      h_share:
+        api: "hk_daily"
+        ts_code: "01211.HK"
+
+# =============================================================================
+# 取数范围与参数
+# =============================================================================
+data_range:
+  default_lookback_days: 365           # 默认回溯 1 年
+  max_lookback_days: 3650              # 最多回溯 10 年（Tushare 积分限制）
+  rolling_window_days: 30              # 增量更新的滚动窗口（天）
+  start_date: null                     # 可为空，由程序自动计算
+  end_date: null                       # 可为空，默认当天
+  adjust_type: null                    # 复权类型: null=不复权 | qfq=前复权 | hfq=后复权
+
+# =============================================================================
+# 并行取数配置
+# =============================================================================
+batch_config:
+  # 控制同时取数时是否串行/并行
+  parallel_enabled: false               # 默认串行（受 Tushare 限速影响）
+  max_workers: 1                        # 并行最大线程数（>1 需注意 rate_limit）
+  batch_sleep_seconds: 1.0             # 每只股票取数后的间隔（秒）
+  on_partial_failure: "continue"        # continue | stop | warn
+
+# =============================================================================
+# 数据质量检查
+# =============================================================================
+data_quality:
+  # 交易日连续性
+  continuity:
+    max_consecutive_missing: 5          # 允许连续缺失 N 个交易日
+    weekend_or_holiday_auto_skip: true  # 自动跳过非交易日
+    action: "warn"                      # warn | fill_forward | fail
+
+  # 价格合理性
+  price_consistency:
+    high_low_check: true                # high >= low 检查
+    open_close_range: true              # open, close 是否在 [low, high] 内
+    pct_chg_consistency: true           # pct_chg ≈ change / pre_close * 100
+    action: "warn"
+
+  # 价格跳空检查
+  gap_check:
+    enabled: true
+    max_gap_pct: 20.0                   # 最大允许跳空百分比（相邻交易日）
+    action: "warn"
+
+  # 零值成交量检查
+  zero_volume_check:
+    enabled: true
+    action: "warn"                      # 零成交量可能代表停牌
+
+  # 新股上市后 N 天内波动检查
+  new_stock_stabilization_days: 20      # 新股上市前 N 天不触发异常警告
+
+# =============================================================================
+# 输出格式
+# =============================================================================
+output:
+  formats:
+    csv:
+      enabled: true
+      encoding: "utf-8-sig"
+      delimiter: ","
+      include_header: true
+      date_format: "YYYY-MM-DD"
+      # 路径模板: data/{subdir}/{stock_name}_{start_date}_{end_date}.csv
+      path_template: "data/{subdir}/{stock_name}/{stock_name}_{start_date}_{end_date}.csv"
+
+    parquet:
+      enabled: false
+      compression: "snappy"
+
+    excel:
+      enabled: false
+
+  # 数据目录结构
+  directory_structure:
+    base: "data"
+    subdirectories:
+      - "raw"                          # 原始 Tushare 返回数据（CSV）
+      - "processed"                    # 加工后数据（合并、清洗）
+      - "reports"                      # 分析报告
+      - "logs"                         # 取数日志
+
+# =============================================================================
+# 数据校验规则
+# =============================================================================
+validation:
+  pre_load:
+    - check_connection: true           # 取数前检测 API 连通性
+    - check_date_range: true           # 日期范围合理性检查
+      date_rules:
+        - start_date <= end_date
+        - start_date >= "1990-12-19"   # 中国股市成立日
+        - end_date <= today
+        - max_span_days: 3650          # 单次最大跨度 10 年
+    - check_token_available: true      # Token 是否有效
+
+  post_load:
+    null_check:
+      enabled: true
+      max_null_ratio: 0.2              # 允许最多 20% 空值
+      action: "warn"                   # warn | drop | fail
+
+    duplicate_check:
+      enabled: true
+      columns: ["ts_code", "trade_date"]
+      action: "drop"
+
+    range_check:
+      enabled: true
+      rules:
+        - field: "close"
+          min: 0.01
+          max: 10000
+        - field: "open"
+          min: 0.01
+        - field: "high"
+          min: 0.01
+        - field: "low"
+          min: 0.01
+        - field: "vol"
+          min: 0
+        - field: "amount"
+          min: 0
+
+    continuity_check:
+      enabled: true
+      max_missing_days: 5
+      action: "warn"
+
+    field_type_check:
+      enabled: true
+      action: "warn"
+      rules:
+        - field: "trade_date"
+          expected_type: "string"
+          pattern: "^[0-9]{8}$"
+        - field: "vol"
+          expected_type: "integer"
+        - field: "open"
+          expected_type: "float"
+
+# =============================================================================
+# 港股取数说明
+# =============================================================================
+# 港股在 Tushare 中使用 hk_daily 接口，代码格式为 5 位数字 + .HK
+# 例如: 00981.HK (中芯国际港股)
+#       01211.HK (比亚迪港股)
+#
+# 港股和 A 股分开存放，输出路径示例:
+#   data/raw/中芯国际/中芯国际_A_20250701_20260709.csv
+#   data/raw/中芯国际/中芯国际_H_20250701_20260709.csv
+#
+# hk_daily API 文档: https://tushare.pro/document/2?doc_id=194
+hk_stock_spec:
+  exchange_suffix: ".HK"
+  code_length: 5                        # 5 位数字，不足补零
+  api_function: "hk_daily"
+  notes: "港股日线行情接口，返回字段与 A 股 daily 基本一致"
+
+# =============================================================================
+# 错误处理
+# =============================================================================
+error_handling:
+  on_api_error:
+    - strategy: "retry"
+    - strategy: "fallback"
+    - strategy: "skip_and_log"
+
+  on_data_empty:
+    - strategy: "warn"
+    - strategy: "log_to_file"
+
+  logging:
+    level: "INFO"
+    file: "data/logs/etl.log"
+    rotation: "1 day"
+    retention: "30 days"
+
+# =============================================================================
+# 调度配置 (可选 - 用于定时任务)
+# =============================================================================
+schedule:
+  frequency: "daily"
+  time: "18:00 Asia/Shanghai"
+  on_trading_days_only: true
+  timeout_minutes: 30
+
+# =============================================================================
+# 通知配置 (可选)
+# =============================================================================
+notification:
+  on_success: false
+  on_failure: true
+  on_empty_data: true
+  channels:
+    - "console"
+  # - "email"
+  # - "wecom_bot"
